@@ -1,0 +1,19 @@
+{
+  "name": "dermai",
+  "version": "1.0.0",
+  "description": "AI-powered dermatology consultation app for family physicians",
+  "scripts": {
+    "start": "cd backend && npm install && node server.js",
+    "install": "cd backend && npm install"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jruwet92/DermAI.git"
+  },
+  "keywords": ["dermatology", "ai", "medical", "healthcare", "consultation"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": "18.x"
+  }
+}
