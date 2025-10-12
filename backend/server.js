@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
@@ -29,6 +28,14 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ 
         error: 'Missing required data',
         message: 'Both image and anamnesis data are required'
+      });
+    }
+
+    // Check if API keys are configured
+    if (!process.env.GEMINI_API_KEY || !process.env.VISION_API_KEY) {
+      return res.status(500).json({
+        error: 'Server configuration error',
+        message: 'API keys not configured. Please add GEMINI_API_KEY and VISION_API_KEY in Render environment variables.'
       });
     }
 
@@ -134,4 +141,77 @@ Provide your analysis in JSON format with exactly this structure:
   ],
   "urgency": "routine",
   "clinicalNotes": [
-    "Key clinical obs
+    "Key clinical observation 1",
+    "Key clinical observation 2",
+    "Key clinical observation 3",
+    "Key clinical observation 4"
+  ],
+  "recommendations": {
+    "immediate": [
+      "Specific diagnostic test or treatment action 1",
+      "Specific diagnostic test or treatment action 2",
+      "Specific patient education or management step"
+    ],
+    "followUp": [
+      "Follow-up timeline and plan 1",
+      "Follow-up timeline and plan 2",
+      "Referral criteria if applicable"
+    ],
+    "redFlags": [
+      "Warning sign that requires urgent evaluation 1",
+      "Warning sign that requires urgent evaluation 2",
+      "Complication to watch for"
+    ]
+  }
+}
+
+IMPORTANT: 
+- Provide exactly 3 differential diagnoses
+- Set urgency to one of: routine, soon, urgent, emergency
+- Be specific about treatments (include drug names, frequencies)
+- Base recommendations on the complete clinical picture
+- Return ONLY valid JSON, no markdown formatting`;
+
+  const response = await fetch(geminiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { 
+        temperature: 0.4, 
+        maxOutputTokens: 2048 
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(`Gemini API Error: ${errorData.error?.message || 'Unknown error'}`);
+  }
+
+  const data = await response.json();
+  const textResponse = data.candidates[0].content.parts[0].text;
+  
+  // Extract JSON from response
+  const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('Could not parse AI response into JSON');
+  }
+  
+  return JSON.parse(jsonMatch[0]);
+}
+
+// Serve static frontend files (for production)
+app.use(express.static(path.join(__dirname, '../frontend')));
+
+// All other routes serve index.html (for SPA routing)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🔑 Gemini API: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Missing - Add in Render dashboard'}`);
+  console.log(`🔑 Vision API: ${process.env.VISION_API_KEY ? '✅ Configured' : '❌ Missing - Add in Render dashboard'}`);
+});
