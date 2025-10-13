@@ -32,10 +32,17 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     // Check if API keys are configured
-    if (!process.env.GEMINI_API_KEY || !process.env.VISION_API_KEY) {
+    if (!process.env.GEMINI_API_KEY) {
       return res.status(500).json({
         error: 'Server configuration error',
-        message: 'API keys not configured. Please add GEMINI_API_KEY and VISION_API_KEY in Render environment variables.'
+        message: 'GEMINI_API_KEY not configured in Render environment variables.'
+      });
+    }
+
+    if (!process.env.GOOGLE_CLOUD_CREDENTIALS) {
+      return res.status(500).json({
+        error: 'Server configuration error',
+        message: 'GOOGLE_CLOUD_CREDENTIALS not configured. Please add your service account JSON as an environment variable.'
       });
     }
 
@@ -65,9 +72,82 @@ app.post('/api/analyze', async (req, res) => {
   }
 });
 
-// Google Cloud Vision API
+// Get OAuth2 access token from service account
+async function getAccessToken() {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CLOUD_CREDENTIALS);
+    
+    // Create JWT
+    const header = {
+      alg: 'RS256',
+      typ: 'JWT',
+      kid: credentials.private_key_id
+    };
+
+    const now = Math.floor(Date.now() / 1000);
+    const claim = {
+      iss: credentials.client_email,
+      scope: 'https://www.googleapis.com/auth/cloud-vision',
+      aud: 'https://oauth2.googleapis.com/token',
+      exp: now + 3600,
+      iat: now
+    };
+
+    // For simplicity, use Google's token endpoint with the service account
+    const jwtToken = await createJWT(header, claim, credentials.private_key);
+    
+    // Exchange JWT for access token
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: jwtToken
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to get access token');
+    }
+
+    const data = await response.json();
+    return data.access_token;
+  } catch (error) {
+    console.error('Error getting access token:', error);
+    throw new Error('Authentication failed: ' + error.message);
+  }
+}
+
+// Simple JWT creation (Note: In production, use a proper JWT library)
+async function createJWT(header, claim, privateKey) {
+  const base64url = (obj) => {
+    return Buffer.from(JSON.stringify(obj))
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  };
+
+  const headerEncoded = base64url(header);
+  const claimEncoded = base64url(claim);
+  const signatureInput = `${headerEncoded}.${claimEncoded}`;
+
+  // Use Node.js crypto to sign
+  const crypto = require('crypto');
+  const sign = crypto.createSign('RSA-SHA256');
+  sign.update(signatureInput);
+  const signature = sign.sign(privateKey, 'base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+
+  return `${signatureInput}.${signature}`;
+}
+
+// Google Cloud Vision API with OAuth2
 async function analyzeImageWithVision(base64Image) {
-  const visionUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.VISION_API_KEY}`;
+  const accessToken = await getAccessToken();
+  const visionUrl = 'https://vision.googleapis.com/v1/images:annotate';
   
   const requestBody = {
     requests: [{
@@ -84,7 +164,10 @@ async function analyzeImageWithVision(base64Image) {
 
   const response = await fetch(visionUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    },
     body: JSON.stringify(requestBody)
   });
 
@@ -212,6 +295,6 @@ app.get('*', (req, res) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`🔑 Gemini API: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Missing - Add in Render dashboard'}`);
-  console.log(`🔑 Vision API: ${process.env.VISION_API_KEY ? '✅ Configured' : '❌ Missing - Add in Render dashboard'}`);
+  console.log(`🔑 Gemini API: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Missing'}`);
+  console.log(`🔑 Google Cloud: ${process.env.GOOGLE_CLOUD_CREDENTIALS ? '✅ Configured' : '❌ Missing'}`);
 });
