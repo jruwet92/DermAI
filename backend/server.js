@@ -181,33 +181,13 @@ async function analyzeImageWithVision(base64Image) {
 
 // Google Gemini API
 async function generateClinicalAnalysis(visionResults, anamnesisData) {
-  // First, let's check what models are available
-  try {
-    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`;
-    const listResponse = await fetch(listUrl);
-    
-    if (listResponse.ok) {
-      const modelData = await listResponse.json();
-      console.log('Available models:', JSON.stringify(modelData, null, 2));
-      
-      // Find a model that supports generateContent
-      const availableModel = modelData.models?.find(m => 
-        m.supportedGenerationMethods?.includes('generateContent')
-      );
-      
-      if (availableModel) {
-        console.log('Using model:', availableModel.name);
-        const modelName = availableModel.name.replace('models/', '');
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-        return await callGeminiAPI(geminiUrl, visionResults, anamnesisData);
-      }
-    }
-  } catch (error) {
-    console.error('Error listing models:', error);
-  }
+  // Use the stable gemini-2.5-flash model
+  const modelName = 'gemini-2.5-flash';
+  console.log('Using Gemini model:', modelName);
   
-  // Fallback to trying known models
-  throw new Error('Could not find a suitable Gemini model. Please check your API key at https://makersuite.google.com/app/apikey');
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  
+  return await callGeminiAPI(geminiUrl, visionResults, anamnesisData);
 }
 
 async function callGeminiAPI(geminiUrl, visionResults, anamnesisData) {
@@ -298,11 +278,18 @@ IMPORTANT:
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`Gemini API Error: ${errorData.error?.message || 'Unknown error'}`);
+    const errorText = await response.text();
+    console.error('Gemini API error response:', errorText);
+    throw new Error(`Gemini API Error: ${errorText}`);
   }
 
   const data = await response.json();
+  
+  if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+    console.error('Unexpected Gemini response structure:', JSON.stringify(data));
+    throw new Error('Invalid response structure from Gemini API');
+  }
+  
   const textResponse = data.candidates[0].content.parts[0].text;
   
   // Extract JSON from response
