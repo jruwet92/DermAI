@@ -181,7 +181,7 @@ async function analyzeImageWithVision(base64Image) {
 
 // Google Gemini API
 async function generateClinicalAnalysis(visionResults, anamnesisData) {
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
   
   const labels = visionResults.responses[0].labelAnnotations?.map(l => l.description).join(', ') || 'None';
   const webEntities = visionResults.responses[0].webDetection?.webEntities?.map(e => e.description).filter(Boolean).slice(0, 5).join(', ') || 'None';
