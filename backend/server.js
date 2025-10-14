@@ -285,7 +285,15 @@ Requirements:
     throw new Error(`Gemini API Error: ${errorText}`);
   }
 
-  const data = await response.json();
+  let data;
+  try {
+    const responseText = await response.text();
+    console.log('Gemini raw response text:', responseText.substring(0, 500));
+    data = JSON.parse(responseText);
+  } catch (jsonError) {
+    console.error('Failed to parse Gemini response as JSON:', jsonError);
+    throw new Error('Failed to parse Gemini API response: ' + jsonError.message);
+  }
   
   if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
     console.error('Unexpected Gemini response structure:', JSON.stringify(data));
