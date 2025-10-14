@@ -213,7 +213,9 @@ PATIENT HISTORY:
 - Allergies: ${anamnesisData.allergies || 'None known'}
 - Family history: ${anamnesisData.familyHistory || 'None reported'}
 
-Provide your analysis in JSON format with exactly this structure:
+CRITICAL: You must respond with ONLY a valid JSON object. Do not include any markdown formatting, code blocks, or explanatory text before or after the JSON.
+
+Provide your analysis in this exact JSON structure:
 {
   "differential": [
     {
@@ -258,12 +260,12 @@ Provide your analysis in JSON format with exactly this structure:
   }
 }
 
-IMPORTANT: 
+Requirements:
 - Provide exactly 3 differential diagnoses
 - Set urgency to one of: routine, soon, urgent, emergency
 - Be specific about treatments (include drug names, frequencies)
 - Base recommendations on the complete clinical picture
-- Return ONLY valid JSON, no markdown formatting`;
+- Return ONLY the JSON object, nothing else`;
 
   const response = await fetch(geminiUrl, {
     method: 'POST',
@@ -292,13 +294,29 @@ IMPORTANT:
   
   const textResponse = data.candidates[0].content.parts[0].text;
   
-  // Extract JSON from response
-  const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+  console.log('Raw Gemini response:', textResponse.substring(0, 500)); // Log first 500 chars for debugging
+  
+  // Extract JSON from response - handle various formats
+  let jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+  
+  // If no match, try removing markdown code blocks
   if (!jsonMatch) {
-    throw new Error('Could not parse AI response into JSON');
+    const cleanedResponse = textResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+    jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
   }
   
-  return JSON.parse(jsonMatch[0]);
+  if (!jsonMatch) {
+    console.error('Could not find JSON in response:', textResponse);
+    throw new Error('Could not parse AI response into JSON format');
+  }
+  
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch (parseError) {
+    console.error('JSON parse error:', parseError);
+    console.error('Attempted to parse:', jsonMatch[0].substring(0, 500));
+    throw new Error('Failed to parse AI response as JSON: ' + parseError.message);
+  }
 }
 
 // Serve static frontend files (for production)
