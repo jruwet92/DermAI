@@ -181,29 +181,33 @@ async function analyzeImageWithVision(base64Image) {
 
 // Google Gemini API
 async function generateClinicalAnalysis(visionResults, anamnesisData) {
-  // List of models to try in order of preference
-  const modelsToTry = [
-    'gemini-1.5-pro-latest',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash-latest', 
-    'gemini-1.5-flash',
-    'gemini-pro'
-  ];
-  
-  let lastError = null;
-  
-  for (const modelName of modelsToTry) {
-    try {
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-      return await callGeminiAPI(geminiUrl, visionResults, anamnesisData);
-    } catch (error) {
-      console.log(`Model ${modelName} failed, trying next...`);
-      lastError = error;
-      continue;
+  // First, let's check what models are available
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`;
+    const listResponse = await fetch(listUrl);
+    
+    if (listResponse.ok) {
+      const modelData = await listResponse.json();
+      console.log('Available models:', JSON.stringify(modelData, null, 2));
+      
+      // Find a model that supports generateContent
+      const availableModel = modelData.models?.find(m => 
+        m.supportedGenerationMethods?.includes('generateContent')
+      );
+      
+      if (availableModel) {
+        console.log('Using model:', availableModel.name);
+        const modelName = availableModel.name.replace('models/', '');
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        return await callGeminiAPI(geminiUrl, visionResults, anamnesisData);
+      }
     }
+  } catch (error) {
+    console.error('Error listing models:', error);
   }
   
-  throw lastError;
+  // Fallback to trying known models
+  throw new Error('Could not find a suitable Gemini model. Please check your API key at https://makersuite.google.com/app/apikey');
 }
 
 async function callGeminiAPI(geminiUrl, visionResults, anamnesisData) {
