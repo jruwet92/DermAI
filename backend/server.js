@@ -274,7 +274,7 @@ Requirements:
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { 
         temperature: 0.4, 
-        maxOutputTokens: 2048 
+        maxOutputTokens: 8192  // Increased from 2048 to 8192
       }
     })
   });
@@ -295,12 +295,25 @@ Requirements:
     throw new Error('Failed to parse Gemini API response: ' + jsonError.message);
   }
   
-  if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-    console.error('Unexpected Gemini response structure:', JSON.stringify(data));
+  if (!data.candidates || !data.candidates[0]) {
+    console.error('No candidates in Gemini response:', JSON.stringify(data));
+    throw new Error('Gemini API returned no candidates');
+  }
+
+  const candidate = data.candidates[0];
+  
+  // Check if response was truncated
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    console.error('Gemini response was truncated due to token limit');
+    throw new Error('Response truncated - increase maxOutputTokens or simplify prompt');
+  }
+  
+  if (!candidate.content || !candidate.content.parts || !candidate.content.parts[0]) {
+    console.error('Invalid content structure in Gemini response:', JSON.stringify(candidate));
     throw new Error('Invalid response structure from Gemini API');
   }
   
-  const textResponse = data.candidates[0].content.parts[0].text;
+  const textResponse = candidate.content.parts[0].text;
   
   console.log('Raw Gemini response:', textResponse.substring(0, 500)); // Log first 500 chars for debugging
   
